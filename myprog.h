@@ -39,6 +39,8 @@ struct State {
     int numLegalMoves;
 };
 
+typedef struct State State;
+
 void CopyState(char *dest, char src);
 void ResetBoard(void);
 void AddMove(char move[12]);
@@ -57,5 +59,7 @@ int MoveLength(char move[12]);
 int TextToMove(char *mtext, char move[12]);
 void MoveToText(char move[12], char *mtext);
 void PerformMove(char board[8][8], char move[12], int mlen);
+float minVal(State *state, int depth);
+float maxVal(State *state, int depth);
 
 #endif

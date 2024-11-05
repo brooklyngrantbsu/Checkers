@@ -7,12 +7,16 @@ LDFLAGS         := -L/usr/X11R6/lib -L /usr/X11R6/LessTif/Motif1.2/lib -lXm -lXa
 # Uncomment this next line if you'd like to compile the graphical version of the checkers server.
 #CFLAGS          += -DGRAPHICS
 
-all: checkers computer
-checkers: graphics.o
+all: checkers computer smartypants
+
+checkers: checkers.o graphics.o
 computer: myprog.o
 	${CC} ${CPPFLAGS} ${CFLAGS} -o $@ $^
+
+smartypants: ourprog.o
+	${CC} ${CPPFLAGS} ${CFLAGS} ${LDFLAGS} -o $@ $^
 
 
 .PHONY: clean
 clean:	
-	@-rm checkers computer *.o
+	@-rm checkers computer smartypants *.o
