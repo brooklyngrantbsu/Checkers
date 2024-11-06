@@ -19,6 +19,8 @@
 #define CLK_TCK CLOCKS_PER_SEC
 #endif
 
+#define MAX_MOVES 100
+
 struct Square square[16][16];
 float SecPerMove;
 int turn,playing=0;
@@ -47,6 +49,8 @@ int movelist[48][12];
 int hlen = 0;
 int hmove[12];
 int HumanMoved = 0;
+
+int move_count = 0;
 
 void Usage(char *str)
 {
@@ -738,6 +742,13 @@ int main(int argc, char *argv[])
                         printf("Move: %s\n",text);
                         PrintBoard();
 #endif
+                        move_count++;
+                        if (move_count >= MAX_MOVES) {
+                            sprintf(str, "The game is a draw (maximum moves of %d reached).", MAX_MOVES);
+                            Message(str);
+                            StopGame();
+                            continue;
+                        }
                         if(turn) turn=0; else turn=1;
     
                         /* Check to see if other player has now lost */

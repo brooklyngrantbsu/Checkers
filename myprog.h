@@ -61,5 +61,10 @@ void MoveToText(char move[12], char *mtext);
 void PerformMove(char board[8][8], char move[12], int mlen);
 float minVal(State *state, int depth);
 float maxVal(State *state, int depth);
+float minValAlphaBeta(State *state, int depth, float alpha, float beta);
+float maxValAlphaBeta(State *state, int depth, float alpha, float beta);
+void *FindBestMoveThread(void *arg);
+void *FindBestMoveAlphaBetaThread(void *arg);
+
 
 #endif

@@ -231,11 +231,11 @@ void PrintBoard(char board[8][8])
         for(x=0; x<8; x++) {
             if(x%2 != y%2 && !empty(board[y][x])) {
                 if(king(board[y][x])) { /* King */
-                    if (color(board[y][x] == 1)) fprintf(stderr, "A");
+                    if (color(board[y][x]) == 1) fprintf(stderr, "A");
                     else fprintf(stderr, "B");
                 } 
                 else if(piece(board[y][x])) { /* Piece */
-                    if (color(board[y][x] == 1)) fprintf(stderr, "a");
+                    if (color(board[y][x]) == 1) fprintf(stderr, "a");
                     else fprintf(stderr, "b");  
                 }
             }
@@ -332,7 +332,7 @@ void FindBestMove(int player)
 {
     int bestMoveIndex = 0; 
     struct State state;
-    float bestMoveVal = -24;
+    float bestMoveVal = -28;
     float currScore;
 
     /* Set up the current state */
@@ -377,9 +377,13 @@ void *timerThread(void *data) {
 void FindBestMoveBase(int player)
 {
     pthread_t timer, fbmt;
+
+    depthHit = 0;
+
     pthread_create(&timer, NULL, timerThread, NULL);
 
-    pthread_create(&fbmt, NULL, FindBestMoveThread(&player), NULL);
+    //pthread_create(&fbmt, NULL, FindBestMoveThread, &player);
+    pthread_create(&fbmt, NULL, FindBestMoveAlphaBetaThread, &player);
     pthread_detach(fbmt);
     pthread_join(timer, NULL);
     pthread_cancel(fbmt);
@@ -388,14 +392,30 @@ void FindBestMoveBase(int player)
 
 }
 
+/* for extra credit
+void randomizeMoves(State *state) {
+    for (int i=0; i<100; i++) {
+        int x,y;
+        char temp[12];
+        //pick random x & y
+        // random number generator: srand(time_t(NULL));
+        x = rand() % state->numLegalMoves; // 0 and last move
+        y = rand() % state->numLegalMoves; // 0 and last move
+        
+        // switch
+        memcpy(temp, state->movelist[x], 12);
+        memcpy(state->movelist[x], state->movelist[y], 12);
+        memcpy(state->movelist[y], temp, 12);
+    }
+}*/
 
 // data is player address
-void FindBestMoveThread(void *data)
+void *FindBestMoveThread(void *data)
 {
     int player = *((int*)data);
     int bestMoveIndex = 0; 
     struct State state;
-    float bestMoveVal = -24;
+    float bestMoveVal = -28;
     float currScore;
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
@@ -408,7 +428,11 @@ void FindBestMoveThread(void *data)
     /* Find the legal moves for the current state */
     FindLegalMoves(&state);
 
+    // for extra credit
+    // randomizeMove(&state);
+
     for (int depth=2;;depth++) {
+        bestMoveVal = -28;
         for (int i=0; i < state.numLegalMoves; i++) {
             State nextState;
             // Need to setup nextState
@@ -435,8 +459,57 @@ void FindBestMoveThread(void *data)
 }
 
 
+// data is player address
+void *FindBestMoveAlphaBetaThread(void *data)
+{
+    int player = *((int*)data);
+    int bestMoveIndex = 0; 
+    struct State state;
+    float bestMoveVal = -28;
+    float currScore;
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+
+    /* Set up the current state */
+    state.player = player;
+    memcpy(state.board,board,64*sizeof(char));
+    memset(bestmove,0,12*sizeof(char));
+
+    /* Find the legal moves for the current state */
+    FindLegalMoves(&state);
+
+    for (int depth=2;;depth++) {
+        bestMoveVal = -28;
+        for (int i=0; i < state.numLegalMoves; i++) {
+            State nextState;
+            // Need to setup nextState
+            memcpy(&nextState, &state, sizeof(State));// taking all in one state and copying it
+
+            PerformMove(nextState.board, nextState.movelist[i], MoveLength(nextState.movelist[i]));
+            if (nextState.player == 1) nextState.player =2;
+            else nextState.player =1;
+
+            // eval move i
+            currScore=minValAlphaBeta(&nextState, depth, bestMoveVal, 28);
+            if (bestMoveVal < currScore) {
+                bestMoveVal = currScore;
+                bestMoveIndex = i;
+            }
+        }
+        // i just finished a search at the current depth limit
+        depthHit = depth;
+        memset(bestmove, 0, sizeof(bestmove));
+        memcpy(bestmove,state.movelist[bestMoveIndex],MoveLength(state.movelist[bestMoveIndex]));
+
+    }
+    return NULL;
+}
+
+
+
 float minVal(State *state, int depth) {
     // 
+    //if (!state->numLegalMoves) return minScore;
     if (--depth < 0) {
         return EvalBoard(state->board);
     } else {
@@ -459,7 +532,7 @@ float minVal(State *state, int depth) {
             if (nextState.player == 1) nextState.player =2;
             else nextState.player =1;
             currScore=maxVal(&nextState, depth);
-            if (minScore < currScore) {
+            if (minScore > currScore) {
                 minScore = currScore;
             }
         }
@@ -469,6 +542,7 @@ float minVal(State *state, int depth) {
 
 
 float maxVal(State *state, int depth) {
+    //if (!state->numLegalMoves) return maxScore;
     // 
     if (--depth < 0) {
         return EvalBoard(state->board);
@@ -492,11 +566,69 @@ float maxVal(State *state, int depth) {
             if (nextState.player == 1) nextState.player =2;
             else nextState.player =1;
             currScore=minVal(&nextState, depth);
-            if (maxScore> currScore) {
+            if (maxScore < currScore) {
                 maxScore = currScore;
             }
         }
         return maxScore;
+    }
+}
+
+
+float minValAlphaBeta(State *state, int depth, float alpha, float beta) {
+    if (--depth < 0) {
+        return EvalBoard(state->board);
+    } else {
+        // for each successor to the current state
+        // call maxVal on s
+        // if maxVal(s) < currentMinVal then set currentMinValue = maxVal(s)
+
+        /* Find the legal moves for the current state */
+        FindLegalMoves(&state);
+
+        for (int i=0; i < state->numLegalMoves; i++) {
+            State nextState;
+            float currScore;
+            // Need to setup nextState
+            memcpy(&nextState, state, sizeof(State));// taking all in one state and copying it
+
+            PerformMove(nextState.board, nextState.movelist[i], MoveLength(state->movelist[i]));
+            if (nextState.player == 1) nextState.player =2;
+            else nextState.player =1;
+            currScore = maxValAlphaBeta(&nextState, depth, alpha, beta);
+            if (beta > currScore) beta = currScore;
+            if (beta <= alpha) return alpha;
+        }
+        return beta;
+    }
+}
+
+
+float maxValAlphaBeta(State *state, int depth, float alpha, float beta) {
+    if (--depth < 0) {
+        return EvalBoard(state->board);
+    } else {
+        // for each successor to the current state
+        // call maxVal on s
+        // if maxVal(s) < currentMinVal then set currentMinValue = maxVal(s)
+
+        /* Find the legal moves for the current state */
+        FindLegalMoves(&state);
+
+        for (int i=0; i < state->numLegalMoves; i++) {
+            State nextState;
+            float currScore;
+            // Need to setup nextState
+            memcpy(&nextState, state, sizeof(State));// taking all in one state and copying it
+
+            PerformMove(nextState.board, nextState.movelist[i], MoveLength(nextState.movelist[i]));
+            if (nextState.player == 1) nextState.player =2;
+            else nextState.player =1;
+            currScore=minValAlphaBeta(&nextState, depth, alpha, beta);
+            if (alpha < currScore) alpha = currScore; // this is taking max of current socre and rval of minval
+            if (alpha>=beta) return beta;
+        }
+        return alpha;
     }
 }
 
