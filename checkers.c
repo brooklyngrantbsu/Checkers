@@ -746,6 +746,7 @@ int main(int argc, char *argv[])
                         if (move_count >= MAX_MOVES) {
                             sprintf(str, "The game is a draw (maximum moves of %d reached).", MAX_MOVES);
                             Message(str);
+                            move_count = 0;
                             StopGame();
                             continue;
                         }
