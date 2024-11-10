@@ -231,7 +231,7 @@ void PrintBoard(char board[8][8])
         for(x=0; x<8; x++) {
             if(x%2 != y%2 && !empty(board[y][x])) {
                 if(king(board[y][x])) { /* King */
-                    if (color(board[y][x]) == 1) fprintf(stderr, "A");
+                    if (color(board[y][x])) fprintf(stderr, "A");
                     else fprintf(stderr, "B");
                 } 
                 else if(piece(board[y][x])) { /* Piece */
