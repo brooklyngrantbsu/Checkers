@@ -19,7 +19,7 @@
 #define CLK_TCK CLOCKS_PER_SEC
 #endif
 
-#define MAX_MOVES 100
+#define MAX_MOVES 150
 
 struct Square square[16][16];
 float SecPerMove;
@@ -475,6 +475,7 @@ void StopGame(void)
                 system(command);
             }
         }
+        move_count = 0;
         playing = 0;
     }
 #ifndef GRAPHICS
@@ -746,7 +747,6 @@ int main(int argc, char *argv[])
                         if (move_count >= MAX_MOVES) {
                             sprintf(str, "The game is a draw (maximum moves of %d reached).", MAX_MOVES);
                             Message(str);
-                            move_count = 0;
                             StopGame();
                             continue;
                         }
