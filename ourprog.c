@@ -259,6 +259,7 @@ float EvalBoard(char board[8][8])
     int x,y;
     float one=0.0;
     float two=0.0;
+    int score = 0;
 
     /* Loop through the board array */
     for(y=0; y<8; y++) {
@@ -276,8 +277,23 @@ float EvalBoard(char board[8][8])
     else rVal = two-one;
 
     return rVal;
+ 
+ /*added heuristic stuff*/
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 8; x++) {
+            char piece = board[y][x];
+            if (piece == myPiece) score += PIECE_VALUE;
+            if (piece == myKing) score += KING_VALUE;
+            if (InCenter(x, y)) score += CENTER_BONUS;
+        }
+    }
+    return score;
 }
 
+// Check if in center (for bonus control value)
+int InCenter(int x, int y) {
+    return (x >= 2 && x <= 5) && (y >= 2 && y <= 5);
+}
 
 /* Determines all of the legal moves possible for a given state */
 int FindLegalMoves(struct State *state)
