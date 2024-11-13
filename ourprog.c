@@ -13,6 +13,8 @@
 #define CLK_TCK CLOCKS_PER_SEC
 #endif
 
+#define CENTER_BONUS 1.0
+
 float SecPerMove;
 char board[8][8];
 char bestmove[12];
@@ -267,6 +269,7 @@ float EvalBoard(char board[8][8])
             if(x%2 != y%2 && !empty(board[y][x])) {
                 float pieceValue = piece(board[y][x]) ? 1.0 : 2.0;
                 if(y == 0 || y == 7) pieceValue += 0.5;  // Near promotion
+                if (InCenter(x, y)) score += CENTER_BONUS;
                 if(color(board[y][x]) == 1) one += pieceValue;
                 else two += pieceValue;
             }
@@ -277,20 +280,9 @@ float EvalBoard(char board[8][8])
     else rVal = two-one;
 
     return rVal;
- 
- /*added heuristic stuff*/
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 8; x++) {
-            char piece = board[y][x];
-            if (piece == myPiece) score += PIECE_VALUE;
-            if (piece == myKing) score += KING_VALUE;
-            if (InCenter(x, y)) score += CENTER_BONUS;
-        }
-    }
-    return score;
 }
 
-// Check if in center (for bonus control value)
+// Check if in center
 int InCenter(int x, int y) {
     return (x >= 2 && x <= 5) && (y >= 2 && y <= 5);
 }
@@ -404,23 +396,6 @@ void FindBestMoveBase(int player)
 
 }
 
-/* for extra credit
-void randomizeMoves(State *state) {
-    for (int i=0; i<100; i++) {
-        int x,y;
-        char temp[12];
-        //pick random x & y
-        // random number generator: srand(time_t(NULL));
-        x = rand() % state->numLegalMoves; // 0 and last move
-        y = rand() % state->numLegalMoves; // 0 and last move
-        
-        // switch
-        memcpy(temp, state->movelist[x], 12);
-        memcpy(state->movelist[x], state->movelist[y], 12);
-        memcpy(state->movelist[y], temp, 12);
-    }
-}*/
-
 // data is player address
 void *FindBestMoveThread(void *data)
 {
@@ -439,9 +414,6 @@ void *FindBestMoveThread(void *data)
 
     /* Find the legal moves for the current state */
     FindLegalMoves(&state);
-
-    // for extra credit
-    // randomizeMove(&state);
 
     for (int depth=2;;depth++) {
         bestMoveVal = -28;
