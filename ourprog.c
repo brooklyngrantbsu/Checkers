@@ -231,7 +231,7 @@ void PrintBoard(char board[8][8])
         for(x=0; x<8; x++) {
             if(x%2 != y%2 && !empty(board[y][x])) {
                 if(king(board[y][x])) { /* King */
-                    if (color(board[y][x])) fprintf(stderr, "A");
+                    if (color(board[y][x]) == 1) fprintf(stderr, "A");
                     else fprintf(stderr, "B");
                 } 
                 else if(piece(board[y][x])) { /* Piece */
@@ -264,14 +264,10 @@ float EvalBoard(char board[8][8])
     for(y=0; y<8; y++) {
         for(x=0; x<8; x++) {
             if(x%2 != y%2 && !empty(board[y][x])) {
-                if(king(board[y][x])) { /* King */
-                    if (color(board[y][x] == 1)) one += 2.0; // king is worth 2
-                    else two += 2.0;
-                } 
-                else if(piece(board[y][x])) { /* Piece */
-                    if (color(board[y][x] == 1)) one += 1.0;
-                    else two += 1.0; 
-                }
+                float pieceValue = piece(board[y][x]) ? 1.0 : 2.0;
+                if(y == 0 || y == 7) pieceValue += 0.5;  // Near promotion
+                if(color(board[y][x]) == 1) one += pieceValue;
+                else two += pieceValue;
             }
         }
     }
@@ -615,6 +611,8 @@ float maxValAlphaBeta(State *state, int depth, float alpha, float beta) {
         /* Find the legal moves for the current state */
         FindLegalMoves(&state);
 
+        ReorderMovesToCaptureFirst(&state);
+
         for (int i=0; i < state->numLegalMoves; i++) {
             State nextState;
             float currScore;
@@ -632,6 +630,23 @@ float maxValAlphaBeta(State *state, int depth, float alpha, float beta) {
     }
 }
 
+void ReorderMovesToCaptureFirst(State *state) {
+    for (int i = 0; i < state->numLegalMoves - 1; i++) {
+        for (int j = i + 1; j < state->numLegalMoves; j++) {
+            if (IsCaptureMove(state->movelist[j]) && !IsCaptureMove(state->movelist[i])) {
+                // Swap moves so capture moves come first
+                char temp[12];
+                memcpy(temp, state->movelist[i], 12);
+                memcpy(state->movelist[i], state->movelist[j], 12);
+                memcpy(state->movelist[j], temp, 12);
+            }
+        }
+    }
+}
+
+int IsCaptureMove(char move[12]) {
+    return MoveLength(move) > 2;
+}
 
 /* Converts a square label to it's x,y position */
 void NumberToXY(char num, int *x, int *y)
