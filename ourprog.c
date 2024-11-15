@@ -8,12 +8,14 @@
 #include "myprog.h"
 #include <float.h>
 #include <pthread.h>
+#include <math.h>
  
 #ifndef CLK_TCK
 #define CLK_TCK CLOCKS_PER_SEC
 #endif
 
 #define CENTER_BONUS 1.0
+#define HASH_SIZE 524287
 
 float SecPerMove;
 char board[8][8];
@@ -36,6 +38,72 @@ int movelist[48][12];
 
 int depthHit;
 
+/* Hash storage */
+
+int hashHits = 0;
+int hashMisses = 0;
+
+typedef struct HashEntry {
+    char board[64];
+    float score;
+    int depth;
+    float alpha, beta;
+    struct HashEntry *next;
+} HashEntry;
+
+HashEntry *hashTable[HASH_SIZE];
+
+unsigned int hash(char board[64]) {
+    unsigned int hash = 0;
+    for (int i = 0; i < 64; i++) {
+        hash = (hash * 31 + board[i]) % HASH_SIZE;
+    }
+    return hash;
+}
+
+void insertToHash(char board[64], float score, int depth, float alpha, float beta) {
+    if (depth < 2 || depth == MaxDepth) {
+        unsigned int index = hash(board);
+        HashEntry *entry = (HashEntry *)malloc(sizeof(HashEntry));
+        memcpy(entry->board, board, 64);
+        entry->score = score;
+        entry->depth = depth;
+        entry->alpha = alpha;
+        entry->beta = beta;
+        entry->next = hashTable[index];
+        hashTable[index] = entry;
+    }
+}
+
+int getFromHash(char board[64], int depth, float alpha, float beta, float *score) {
+    unsigned int index = hash(board);
+    HashEntry *entry = hashTable[index];
+    while (entry) {
+        if (memcmp(entry->board, board, 64) == 0 && entry->depth >= depth) {
+            *score = entry->score;
+            return 1;
+        }
+        entry = entry->next;
+    }
+    return 0;
+}
+
+void ClearHash() {
+    for (int i = 0; i < HASH_SIZE; i++) {
+        HashEntry *entry = hashTable[i];
+        while (entry) {
+            HashEntry *temp = entry;
+            entry = entry->next;
+            free(temp);
+        }
+        hashTable[i] = NULL;
+    }
+    hashHits = hashMisses = 0;
+}
+
+
+/* Hosh stoarage */
+
 /* Print the amount of time passed since my turn began */
 void PrintTime(void)
 {
@@ -43,11 +111,10 @@ void PrintTime(void)
     float total;
 
     current = times(&bff);
-    total = (float) ((float)current-(float)start)/CLK_TCK;
+    total = (float) ((float)current - (float)start)/CLK_TCK;
     fprintf(stderr, "Time = %f\n", total);
 }
 
-/* Determine if I'm low on time */
 int LowOnTime(void) 
 {
     clock_t current;
@@ -254,14 +321,12 @@ void PrintBoard(char board[8][8])
     }
 }
 
-
 /* Eval Board */
 float EvalBoard(char board[8][8])
 {
     int x,y;
     float one=0.0;
     float two=0.0;
-    int score = 0;
 
     /* Loop through the board array */
     for(y=0; y<8; y++) {
@@ -269,7 +334,7 @@ float EvalBoard(char board[8][8])
             if(x%2 != y%2 && !empty(board[y][x])) {
                 float pieceValue = piece(board[y][x]) ? 1.0 : 2.0;
                 if(y == 0 || y == 7) pieceValue += 0.5;  // Near promotion
-                if (InCenter(x, y)) score += CENTER_BONUS;
+                if (InCenter(x, y)) pieceValue += CENTER_BONUS;
                 if(color(board[y][x]) == 1) one += pieceValue;
                 else two += pieceValue;
             }
@@ -459,11 +524,11 @@ void *FindBestMoveAlphaBetaThread(void *data)
     memcpy(state.board,board,64*sizeof(char));
     memset(bestmove,0,12*sizeof(char));
 
-    /* Find the legal moves for the current state */
-    FindLegalMoves(&state);
 
     for (int depth=2;;depth++) {
         bestMoveVal = -28;
+        /* Find the legal moves for the current state */
+        FindLegalMoves(&state);
         for (int i=0; i < state.numLegalMoves; i++) {
             State nextState;
             // Need to setup nextState
@@ -563,26 +628,33 @@ float minValAlphaBeta(State *state, int depth, float alpha, float beta) {
     if (--depth < 0) {
         return EvalBoard(state->board);
     } else {
-        // for each successor to the current state
-        // call maxVal on s
-        // if maxVal(s) < currentMinVal then set currentMinValue = maxVal(s)
+        
+        float cachedScore;
+        if (getFromHash((char *)state->board, depth, alpha, beta, &cachedScore)) {
+            hashHits++;
+            return cachedScore;
+        }
+        hashMisses++;
 
         /* Find the legal moves for the current state */
         FindLegalMoves(&state);
+        if (state->numLegalMoves == 0) {
+            return (me == 1) ? -28 : 28;
+        }
 
         for (int i=0; i < state->numLegalMoves; i++) {
             State nextState;
-            float currScore;
-            // Need to setup nextState
             memcpy(&nextState, state, sizeof(State));// taking all in one state and copying it
 
             PerformMove(nextState.board, nextState.movelist[i], MoveLength(state->movelist[i]));
-            if (nextState.player == 1) nextState.player =2;
-            else nextState.player =1;
-            currScore = maxValAlphaBeta(&nextState, depth, alpha, beta);
-            if (beta > currScore) beta = currScore;
+            nextState.player = (nextState.player == 1) ? 2 : 1;
+
+            float currScore = maxValAlphaBeta(&nextState, depth, alpha, beta);
+            beta = fmin(beta, currScore);
             if (beta <= alpha) return alpha;
         }
+        
+        insertToHash((char *)state->board, beta, depth, alpha, beta);
         return beta;
     }
 }
@@ -596,44 +668,36 @@ float maxValAlphaBeta(State *state, int depth, float alpha, float beta) {
         // call maxVal on s
         // if maxVal(s) < currentMinVal then set currentMinValue = maxVal(s)
 
+        float cachedScore;
+        if (getFromHash((char *)state->board, depth, alpha, beta, &cachedScore)) {
+            hashHits++;
+            return cachedScore;
+        }
+        hashMisses++;
+
         /* Find the legal moves for the current state */
         FindLegalMoves(&state);
 
-        ReorderMovesToCaptureFirst(&state);
+        if (state->numLegalMoves == 0) {
+            return (me == 1) ? 28 : -28;
+        }
 
         for (int i=0; i < state->numLegalMoves; i++) {
             State nextState;
-            float currScore;
             // Need to setup nextState
             memcpy(&nextState, state, sizeof(State));// taking all in one state and copying it
 
             PerformMove(nextState.board, nextState.movelist[i], MoveLength(nextState.movelist[i]));
-            if (nextState.player == 1) nextState.player =2;
-            else nextState.player =1;
-            currScore=minValAlphaBeta(&nextState, depth, alpha, beta);
-            if (alpha < currScore) alpha = currScore; // this is taking max of current socre and rval of minval
+            nextState.player = (nextState.player == 1) ? 2 : 1;
+
+            float currScore=minValAlphaBeta(&nextState, depth, alpha, beta);
+            alpha = fmax(alpha, currScore); // this is taking max of current socre and rval of minval
             if (alpha>=beta) return beta;
         }
+
+        insertToHash((char *)state->board, alpha, depth, alpha, beta);
         return alpha;
     }
-}
-
-void ReorderMovesToCaptureFirst(State *state) {
-    for (int i = 0; i < state->numLegalMoves - 1; i++) {
-        for (int j = i + 1; j < state->numLegalMoves; j++) {
-            if (IsCaptureMove(state->movelist[j]) && !IsCaptureMove(state->movelist[i])) {
-                // Swap moves so capture moves come first
-                char temp[12];
-                memcpy(temp, state->movelist[i], 12);
-                memcpy(state->movelist[i], state->movelist[j], 12);
-                memcpy(state->movelist[j], temp, 12);
-            }
-        }
-    }
-}
-
-int IsCaptureMove(char move[12]) {
-    return MoveLength(move) > 2;
 }
 
 /* Converts a square label to it's x,y position */
@@ -733,6 +797,9 @@ void PerformMove(char board[8][8], char move[12], int mlen)
 
 int main(int argc, char *argv[])
 {
+
+    ClearHash();
+    
     char buf[1028],move[12];
     int len,mlen,player1;
 
